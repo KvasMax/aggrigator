@@ -16,11 +16,30 @@ internal class PostListViewModel @Inject constructor(
     private val posts_ = MutableLiveData<List<Post>>()
     internal var posts: LiveData<List<Post>> = posts_
 
+    private val loading_ = MutableLiveData<Boolean>()
+    internal var loading: LiveData<Boolean> = loading_
+
     init {
         launch {
+            loading_.postValue(true)
             val posts = redditRepo.getPosts()
             posts_.postValue(posts)
+            loading_.postValue(false)
         }
     }
+
+    fun loadMore() {
+        if (loading.value == false) {
+            launch {
+                posts.value?.let {
+                    loading_.postValue(true)
+                    val posts = redditRepo.getPosts(lastPostName = it.lastOrNull()?.uniqueId)
+                    posts_.postValue(it + posts)
+                    loading_.postValue(false)
+                }
+            }
+        }
+    }
+
 
 }

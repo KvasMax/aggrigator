@@ -14,7 +14,8 @@ import kotlinx.android.synthetic.main.item_video_post.view.*
 import mini.max.core.BaseFragment
 import mini.max.core.BaseRecyclerViewHolder
 import mini.max.core.ViewModelFactory
-import mini.max.core_utils.isVisible
+import mini.max.core_utils.gone
+import mini.max.core_utils.show
 import mini.max.reddit.R
 import mini.max.reddit.di.RedditComponent
 import mini.max.reddit.ui.models.GifPost
@@ -34,7 +35,9 @@ internal class PostListFragment : BaseFragment<PostListViewModel>() {
         ViewModelProviders.of(this@PostListFragment, viewModelFactory).get(PostListViewModel::class.java)
     }
 
-    private val adapter = PostsAdapter()
+    private val adapter = PostsAdapter({
+        viewModel.loadMore()
+    })
 
     override fun injectDependencies() {
         RedditComponent.get().inject(this)
@@ -45,10 +48,15 @@ internal class PostListFragment : BaseFragment<PostListViewModel>() {
         viewModel.posts.observe(this, Observer {
             adapter.setCollection(it)
         })
+        viewModel.loading.observe(this, Observer {
+            if (it) progressBar.show() else progressBar.gone()
+        })
     }
 }
 
-private class PostsAdapter : RecyclerView.Adapter<BaseRecyclerViewHolder>() {
+private class PostsAdapter(
+    private val onLastItemAppear: () -> Unit
+) : RecyclerView.Adapter<BaseRecyclerViewHolder>() {
 
     private companion object {
         private const val PLAIN_POST_TYPE = 0
@@ -98,6 +106,9 @@ private class PostsAdapter : RecyclerView.Adapter<BaseRecyclerViewHolder>() {
     override fun onViewAttachedToWindow(holder: BaseRecyclerViewHolder) {
         super.onViewAttachedToWindow(holder)
         (holder as? VideoPostViewHolder)?.playVideo()
+        if (holder.adapterPosition + 1 == items.size) {
+            onLastItemAppear()
+        }
     }
 
     override fun onViewDetachedFromWindow(holder: BaseRecyclerViewHolder) {
@@ -144,24 +155,46 @@ private class GifPostViewHolder(parent: ViewGroup) : BaseRecyclerViewHolder(pare
 
 private class VideoPostViewHolder(parent: ViewGroup) : BaseRecyclerViewHolder(parent, R.layout.item_video_post) {
 
+    init {
+        itemView.apply {
+            setOnClickListener {
+                if (videoView.isPlaying) {
+                    videoView.pause()
+                } else {
+                    if (videoView.duration == videoView.currentPosition) {
+                        videoView.seekTo(0)
+                    }
+                    videoView.start()
+                }
+            }
+        }
+    }
+
+    private var post: VideoPost? = null
+
     fun bind(post: VideoPost) {
+        this.post = post
         with(itemView) {
             videoPostTitleTextView.text = post.title
             videoView.setVideoURI(post.uri)
+            //videoView.start()
+            //videoView.seekTo(post.currentProgress)
+            //videoView.pause()
         }
 
+    }
+
+    private fun stopPlaybackAndSavePosition() {
+        post?.currentProgress = itemView.videoView.currentPosition
+        itemView.videoView.stopPlayback()
     }
 
     fun playVideo() {
-        itemView.videoView.apply {
-            if (isVisible()) start()
-        }
+        itemView.videoView.start()
     }
 
     fun stopVideo() {
-        itemView.videoView.apply {
-            if (isVisible()) stopPlayback()
-        }
+        stopPlaybackAndSavePosition()
     }
 }
 

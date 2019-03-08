@@ -16,20 +16,22 @@ import javax.inject.Inject
 internal class RedditRepo @Inject constructor(
     private val webService: RedditWebService
 ) {
-    suspend fun getPosts(): List<Post> = withContext(Dispatchers.IO) {
-        return@withContext webService.getPosts("funny").await().map {
+    suspend fun getPosts(lastPostName: String? = null): List<Post> = withContext(Dispatchers.IO) {
+        return@withContext (lastPostName?.let { webService.getNextPosts("funny", it) }
+            ?: webService.getPosts("funny")).await().map {
             val title = it.data?.title ?: ""
+            val uniqueId = it.data?.name ?: ""
             val videoUrl = it.data?.media?.redditVideo?.fallbackUrl
             if (videoUrl != null) {
-                return@map VideoPost(title, Uri.parse(videoUrl))
+                return@map VideoPost(title, uniqueId, Uri.parse(videoUrl))
             }
             it.data?.preview?.images?.firstOrNull()?.variants?.gif?.source?.url?.let { gifUrl ->
-                return@map GifPost(title, GifDrawable(BufferedInputStream(URL(gifUrl).openStream())))
+                return@map GifPost(title, uniqueId, GifDrawable(BufferedInputStream(URL(gifUrl).openStream())))
             }
             it.data?.preview?.images?.firstOrNull()?.source?.url?.replace("amp;", "")?.let { imageUrl ->
-                return@map ImagePost(title, imageUrl)
+                return@map ImagePost(title, uniqueId, imageUrl)
             }
-            return@map Post(title)
+            return@map Post(title, uniqueId)
         }
     }
 }
